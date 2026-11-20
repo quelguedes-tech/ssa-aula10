@@ -1,6 +1,7 @@
 pipeline {
 
     triggers {
+        pollSCM('H/2 * * * *')
         // TODO: investigar e configurar a alternativa com webhook.
         // githubPush()
     }
