@@ -3,3 +3,4 @@ reports
 infra
 ci
 Jenkinsfile
+app-image.tar

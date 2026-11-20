@@ -24,6 +24,7 @@ services:
     build: ./infra/jenkins
     ports:
       - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8000:8000"
     environment:
       DOCKER_HOST: tcp://docker:2376
       DOCKER_CERT_PATH: /certs/client
