@@ -5,6 +5,7 @@ pipeline {
     }
     agent { node { label ''; customWorkspace '/workspace/devsecops-lab' } }
     options { skipDefaultCheckout(true); disableConcurrentBuilds() }
+    environment { APP_IMAGE = "classroom-app:${BUILD_NUMBER}" }
     stages {
         stage('SCA - Trivy') {
             steps {
@@ -23,6 +24,10 @@ pipeline {
                     '''
             }
         }
+        stage('Build application image') {
+            steps { sh 'docker build -t "$APP_IMAGE" .' }
+        }
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -31,6 +36,12 @@ pipeline {
         }
         stage('Verify Docker') {
             steps { sh 'docker version' }
+        }
+    }
+    
+    post {
+        always {
+            sh 'docker image rm "$APP_IMAGE" 2>/dev/null || true'
         }
     }
 }
