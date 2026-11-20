@@ -8,6 +8,8 @@ pipeline {
 
     environment {
         APP_IMAGE = "classroom-app:${BUILD_NUMBER}"
+        APP_CONTAINER = "classroom-app-${BUILD_NUMBER}"
+        LAB_NETWORK = "classroom-net-${BUILD_NUMBER}"
     }
     agent { node { label ''; customWorkspace '/workspace/devsecops-lab' } }
     options { skipDefaultCheckout(true); disableConcurrentBuilds() }
@@ -45,11 +47,55 @@ pipeline {
                 sh 'docker build -t "$APP_IMAGE" .'
             }
         }
+
+        stage('Start application') {
+            steps {
+                sh '''
+                    docker network create "$LAB_NETWORK"
+                    docker run -d --name "$APP_CONTAINER" --network "$LAB_NETWORK" "$APP_IMAGE"
+                    ready=0
+                    for attempt in $(seq 1 30); do
+                        if docker exec "$APP_CONTAINER" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then
+                            ready=1
+                            break
+                        fi
+                        sleep 2
+                    done
+                    if [ "$ready" -ne 1 ]; then
+                        docker logs "$APP_CONTAINER"
+                        exit 1
+                    fi
+                    '''
+            }
+        }
+
+        stage('DAST - ZAP Baseline') {
+            steps {
+                sh 'mkdir -p reports/zap; rm -f reports/zap/*; chmod 777 reports/zap'
+                script {
+                    int status = sh(returnStatus: true, script: '''
+                        docker run --rm --network "$LAB_NETWORK" \
+                        -v "$WORKSPACE/reports/zap:/zap/wrk:rw" \
+                        ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                        -t "http://$APP_CONTAINER:8000" -m 1 \
+                        -r zap.html -J zap.json
+                    ''')
+                    if (status < 0 || status > 2) {
+                        error("ZAP execution failed with exit code ${status}")
+                    }
+                    sh 'test -s reports/zap/zap.json'
+                }
+            }
+        }
     }
 
     post {
         always {
+            sh 'docker logs "$APP_CONTAINER" 2>/dev/null || true'
+            sh 'docker rm -f "$APP_CONTAINER" 2>/dev/null || true'
+            sh 'docker network rm "$LAB_NETWORK" 2>/dev/null || true'
             sh 'docker image rm "$APP_IMAGE" 2>/dev/null || true'
+            archiveArtifacts artifacts: 'reports/zap/*', allowEmptyArchive: true
         }
     }
 }
