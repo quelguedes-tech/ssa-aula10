@@ -1,4 +1,8 @@
 pipeline {
+    triggers {
+        // TODO: investigar e configurar a alternativa com webhook.
+        // githubPush()
+    }
     agent { node { label ''; customWorkspace '/workspace/devsecops-lab' } }
     options { skipDefaultCheckout(true); disableConcurrentBuilds() }
     stages {
