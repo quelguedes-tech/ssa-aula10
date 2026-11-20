@@ -1,12 +1,27 @@
 pipeline {
+
     triggers {
         // TODO: investigar e configurar a alternativa com webhook.
         // githubPush()
     }
+
+    environment {
+        APP_IMAGE = "classroom-app:${BUILD_NUMBER}"
+    }
     agent { node { label ''; customWorkspace '/workspace/devsecops-lab' } }
     options { skipDefaultCheckout(true); disableConcurrentBuilds() }
-    environment { APP_IMAGE = "classroom-app:${BUILD_NUMBER}" }
+
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Verify Docker') {
+            steps {
+                sh 'docker version'
+            }
+        }
         stage('SCA - Trivy') {
             steps {
                 sh '''
@@ -17,28 +32,20 @@ pipeline {
         }
         stage('SAST - Bandit') {
             steps {
-                sh 'docker build -f ci/Dockerfile.bandit -t classroombandit:local .’
+                sh 'docker build -f ci/Dockerfile.bandit -t classroom-bandit:local .'
                 sh '''
                     docker run --rm -v "$WORKSPACE:/src" \
                     classroom-bandit:local -r app --exit-zero
-                    '''
+                '''
             }
         }
         stage('Build application image') {
-            steps { sh 'docker build -t "$APP_IMAGE" .' }
-        }
-
-        stage('Checkout') {
             steps {
-                checkout scm
-                sh 'git rev-parse HEAD'
+                sh 'docker build -t "$APP_IMAGE" .'
             }
         }
-        stage('Verify Docker') {
-            steps { sh 'docker version' }
-        }
     }
-    
+
     post {
         always {
             sh 'docker image rm "$APP_IMAGE" 2>/dev/null || true'
